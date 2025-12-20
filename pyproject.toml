@@ -1,0 +1,25 @@
+[project]
+name = "cd_to_apple_book"
+description = "Personal CD-to-Apple Books audiobook workflow"
+license = {text = "MIT"}
+version = "1.0.0"
+dependencies = ["musicbrainzngs","pyyaml","requests"]
+requires-python = ">= 3.10"
+readme = "README.md"
+authors = [{name="Gerard", email="gerardw@alum.mit.edu"}]
+
+[tool.setuptools]
+package-dir = {"" = "src"}
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[project.scripts]
+cd_to_apple_book = "cd_to_apple_book.main:main"
+
+[project.optional-dependencies]
+test = ["pytest"]
+
+[build-system]
+requires = ["setuptools"]
+build-backend = "setuptools.build_meta"
