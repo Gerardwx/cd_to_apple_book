@@ -1,5 +1,6 @@
 from pathlib import Path
 import subprocess
+import time 
 import yaml
 
 from .util import confirm
@@ -11,14 +12,13 @@ except ImportError:
     HAVE_MUSICBRAINZ = False
 
 
+def load_cfg(p: Path) -> dict:
+    with p.open() as f: return yaml.safe_load(f)
+
+
 def fetch_musicbrainz_metadata(*, expected: dict, interactive: bool) -> dict:
     import musicbrainzngs
-
-    musicbrainzngs.set_useragent(
-        "ripper",
-        "1.0",
-        "https://example.org",
-    )
+    musicbrainzngs.set_useragent("ripper", "1.0", "https://example.org")
 
     result = musicbrainzngs.search_releases(
         artist=expected.get("author"),
@@ -27,113 +27,97 @@ def fetch_musicbrainz_metadata(*, expected: dict, interactive: bool) -> dict:
     )
 
     releases = result.get("release-list", [])
-    release = choose_release(
-        releases,
-        expected=expected,
-        interactive=interactive,
-    )
-
-    if not release:
-        raise RuntimeError("No suitable MusicBrainz release found")
+    release = choose_release(releases, expected=expected, interactive=interactive)
+    if not release: raise RuntimeError("No suitable MusicBrainz release found")
 
     full = musicbrainzngs.get_release_by_id(
-        release["id"],
-        includes=["recordings"],
+        release["id"], includes=["recordings"]
     )["release"]
 
     return extract_metadata(full)
 
 
 def write_yaml(book_dir: Path, meta: dict):
-    with open(book_dir / "book.yaml", "w") as f:
+    with (book_dir / "book.yaml").open("w") as f:
         yaml.safe_dump(meta, f, sort_keys=False)
-    (book_dir / "COMPLETE").touch()
 
 
 def rip_cd(
     book_dir: Path,
     disc: int,
     *,
-    use_musicbrainz: bool = False,
-    expected: dict | None = None,
-    interactive: bool = False,
     dry_run: bool = False,
 ):
     disc_dir = book_dir / f"disc{disc}"
 
+    if disc_dir.exists() and any(disc_dir.glob("*.m4a")):
+        print(f"Disc {disc} already ripped — skipping")
+        return
+
     if dry_run:
         print(f"[DRY-RUN] Would create {disc_dir}")
-    else:
-        disc_dir.mkdir(parents=True, exist_ok=True)
+        print("[DRY-RUN] Would run abcde in disc directory")
+        return
+
+    disc_dir.mkdir(parents=True, exist_ok=True)
+    confirm(f"Insert CD {disc}")
+
+    start = time.monotonic()
+    subprocess.run(["abcde", "-o", "m4a"], cwd=disc_dir, check=True)
+    elapsed = time.monotonic() - start
+
+    mins, secs = divmod(int(elapsed), 60)
+    print(f"Disc {disc} ripped in {mins}m {secs}s")
+
+def old_rip_cd(
+    book_dir: Path,
+    disc: int,
+    *,
+    dry_run: bool = False,
+):
+    disc_dir = book_dir / f"disc{disc}"
+
+    if disc_dir.exists() and any(disc_dir.glob("*.m4a")):
+        print(f"Disc {disc} already ripped — skipping")
+        return
 
     if dry_run:
-        print("[DRY-RUN] Would rip CD with abcde")
-    else:
-        confirm(f"Insert CD {disc}")
-        subprocess.run(["abcde", "-o", "m4a"], check=True)
+        print(f"[DRY-RUN] Would create {disc_dir}")
+        print("[DRY-RUN] Would run abcde in disc directory")
+        return
 
-    if dry_run:
-        print("[DRY-RUN] Would move ripped .m4a files")
-    else:
-        for f in Path(".").glob("*.m4a"):
-            f.rename(disc_dir / f.name)
-
-    if use_musicbrainz:
-        if not HAVE_MUSICBRAINZ:
-            raise RuntimeError("MusicBrainz support requested but not available")
-
-        if not expected:
-            raise ValueError("expected metadata required with --musicbrainz")
-
-        meta = fetch_musicbrainz_metadata(
-            expected=expected,
-            interactive=interactive,
-        )
-
-        if dry_run:
-            print("[DRY-RUN] Would write book.yaml:")
-            print(yaml.safe_dump(meta, sort_keys=False))
-        else:
-            write_yaml(book_dir, meta)
+    disc_dir.mkdir(parents=True, exist_ok=True)
+    confirm(f"Insert CD {disc}")
+    subprocess.run(["abcde", "-o", "m4a"], cwd=disc_dir, check=True)
 
 
 def main():
-    import argparse
+    import argparse, platform, sys
 
-    p = argparse.ArgumentParser(
-        description="Rip audio CDs into a structured audiobook directory",
-    )
+    if platform.system() != "Linux":
+        sys.exit("rip must run on Linux")
 
-    p.add_argument("book_dir", type=Path, help="Target book directory")
-    p.add_argument("--disc", type=int, required=True, help="Disc number")
-
-    p.add_argument("--musicbrainz", action="store_true", help="Use MusicBrainz metadata")
-    p.add_argument("--interactive", action="store_true", help="Interactively choose release")
-    p.add_argument("--dry-run", action="store_true", help="Show actions without executing")
-
-    p.add_argument("--title", help="Expected title (required with --musicbrainz)")
-    p.add_argument("--author", help="Expected author (required with --musicbrainz)")
+    p = argparse.ArgumentParser(description="Rip audiobook CDs")
+    p.add_argument("config", type=Path, help="YAML config file")
+    p.add_argument("--start-disc", type=int, default=1)
+    p.add_argument("--dry-run", action="store_true")
 
     args = p.parse_args()
 
-    expected = None
-    if args.musicbrainz:
-        if not args.title or not args.author:
-            p.error("--musicbrainz requires --title and --author")
-        expected = {
-            "title": args.title,
-            "author": args.author,
-        }
+    cfg = load_cfg(args.config)
+    if "cds" not in cfg or "title" not in cfg:
+        sys.exit("YAML must contain at least: title, cds")
 
-    rip_cd(
-        book_dir=args.book_dir,
-        disc=args.disc,
-        use_musicbrainz=args.musicbrainz,
-        interactive=args.interactive,
-        expected=expected,
-        dry_run=args.dry_run,
-    )
+    rip_root = Path(cfg.get("rip path", ".")).expanduser()
+    book_dir = rip_root / cfg["title"].replace(" ", "_")
+    book_dir.mkdir(parents=True, exist_ok=True)
+
+    write_yaml(book_dir, cfg)
+
+    for disc in range(args.start_disc, cfg["cds"] + 1):
+        rip_cd(book_dir, disc, dry_run=args.dry_run)
 
 
 if __name__ == "__main__":
     main()
+
