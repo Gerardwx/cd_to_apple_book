@@ -1,52 +1,21 @@
 from pathlib import Path
-import subprocess
-import time 
-import yaml
-
+import argparse, platform, sys, subprocess, time, os, yaml
 from .util import confirm
-
-try:
-    from .musicbrainz import choose_release, extract_metadata
-    HAVE_MUSICBRAINZ = True
-except ImportError:
-    HAVE_MUSICBRAINZ = False
-
 
 def load_cfg(p: Path) -> dict:
     with p.open() as f: return yaml.safe_load(f)
-
-
-def fetch_musicbrainz_metadata(*, expected: dict, interactive: bool) -> dict:
-    import musicbrainzngs
-    musicbrainzngs.set_useragent("ripper", "1.0", "https://example.org")
-
-    result = musicbrainzngs.search_releases(
-        artist=expected.get("author"),
-        release=expected.get("title"),
-        limit=10,
-    )
-
-    releases = result.get("release-list", [])
-    release = choose_release(releases, expected=expected, interactive=interactive)
-    if not release: raise RuntimeError("No suitable MusicBrainz release found")
-
-    full = musicbrainzngs.get_release_by_id(
-        release["id"], includes=["recordings"]
-    )["release"]
-
-    return extract_metadata(full)
-
 
 def write_yaml(book_dir: Path, meta: dict):
     with (book_dir / "book.yaml").open("w") as f:
         yaml.safe_dump(meta, f, sort_keys=False)
 
-
 def rip_cd(
     book_dir: Path,
     disc: int,
     *,
-    dry_run: bool = False,
+    relaxed: bool,
+    paranoid: bool,
+    dry_run: bool,
 ):
     disc_dir = book_dir / f"disc{disc}"
 
@@ -54,59 +23,58 @@ def rip_cd(
         print(f"Disc {disc} already ripped — skipping")
         return
 
-    if dry_run:
-        print(f"[DRY-RUN] Would create {disc_dir}")
-        print("[DRY-RUN] Would run abcde in disc directory")
-        return
-
     disc_dir.mkdir(parents=True, exist_ok=True)
     confirm(f"Insert CD {disc}")
 
-    start = time.monotonic()
-    subprocess.run(["abcde", "-o", "m4a"], cwd=disc_dir, check=True)
-    elapsed = time.monotonic() - start
+    cmd = ["abcde", "-o", "m4a"]
+    if disc != 1:
+        cmd.append("-N")  # non-interactive for discs > 1
 
-    mins, secs = divmod(int(elapsed), 60)
-    print(f"Disc {disc} ripped in {mins}m {secs}s")
-
-def old_rip_cd(
-    book_dir: Path,
-    disc: int,
-    *,
-    dry_run: bool = False,
-):
-    disc_dir = book_dir / f"disc{disc}"
-
-    if disc_dir.exists() and any(disc_dir.glob("*.m4a")):
-        print(f"Disc {disc} already ripped — skipping")
-        return
+    def run(env_opts: str | None):
+        env = os.environ if not env_opts else os.environ | {"CDPARANOIAOPTS": env_opts}
+        start = time.monotonic()
+        subprocess.run(cmd, cwd=disc_dir, env=env, check=True)
+        elapsed = time.monotonic() - start
+        m, s = divmod(int(elapsed), 60)
+        print(f"Disc {disc} ripped in {m}m {s}s")
 
     if dry_run:
-        print(f"[DRY-RUN] Would create {disc_dir}")
-        print("[DRY-RUN] Would run abcde in disc directory")
+        mode = "paranoid" if paranoid else "relaxed+fallback"
+        print(f"[DRY-RUN] Would rip disc {disc} ({mode})")
         return
 
-    disc_dir.mkdir(parents=True, exist_ok=True)
-    confirm(f"Insert CD {disc}")
-    subprocess.run(["abcde", "-o", "m4a"], cwd=disc_dir, check=True)
+    if paranoid:
+        run(None); return
+    if relaxed:
+        run("--never-skip"); return
 
+    try:
+        run("--never-skip")
+    except subprocess.CalledProcessError:
+        print(f"Disc {disc} failed in relaxed mode — retrying paranoid")
+        run(None)
 
 def main():
-    import argparse, platform, sys
-
+    OS = platform.system()
+    if OS != "Linux": sys.exit("rip must run on Linux")
     if platform.system() != "Linux":
         sys.exit("rip must run on Linux")
 
     p = argparse.ArgumentParser(description="Rip audiobook CDs")
     p.add_argument("config", type=Path, help="YAML config file")
     p.add_argument("--start-disc", type=int, default=1)
+    p.add_argument("--relaxed", action="store_true", help="Relaxed paranoia (fast)")
+    p.add_argument("--paranoid", action="store_true", help="Full paranoia (slow)")
     p.add_argument("--dry-run", action="store_true")
-
     args = p.parse_args()
 
+    if args.relaxed and args.paranoid:
+        p.error("--relaxed and --paranoid are mutually exclusive")
+
     cfg = load_cfg(args.config)
-    if "cds" not in cfg or "title" not in cfg:
-        sys.exit("YAML must contain at least: title, cds")
+    for k in ("title", "cds"):
+        if k not in cfg:
+            sys.exit(f"YAML missing required key: {k}")
 
     rip_root = Path(cfg.get("rip path", ".")).expanduser()
     book_dir = rip_root / cfg["title"].replace(" ", "_")
@@ -115,8 +83,13 @@ def main():
     write_yaml(book_dir, cfg)
 
     for disc in range(args.start_disc, cfg["cds"] + 1):
-        rip_cd(book_dir, disc, dry_run=args.dry_run)
-
+        rip_cd(
+            book_dir,
+            disc,
+            relaxed=args.relaxed,
+            paranoid=args.paranoid,
+            dry_run=args.dry_run,
+        )
 
 if __name__ == "__main__":
     main()
