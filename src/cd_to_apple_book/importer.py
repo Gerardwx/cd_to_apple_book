@@ -1,4 +1,5 @@
 from pathlib import Path
+import platform
 import argparse, subprocess, yaml, sys, re, tempfile, shutil
 
 def require(cmd: str):
@@ -127,6 +128,8 @@ def import_book(book_dir: Path):
     print(f"Imported audiobook into Books: {m4b}")
 
 def main():
+    OS = platform.system()
+    if OS != "Darwin": sys.exit("importer must run on Mac OS X")
     require("ffmpeg")
     require("ffprobe")
 
