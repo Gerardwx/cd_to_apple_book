@@ -1,0 +1,13 @@
+title: The Hobbit
+author: J.R.R. Tolkien
+narrator: Rob Inglis
+cds: 2
+
+audio:
+  codec: aac
+  bitrate: 96k
+  channels: mono
+
+rip path: /mnt/... # Linux path 
+import path:  /System/Volumes/Data/... #MacOS path
+
