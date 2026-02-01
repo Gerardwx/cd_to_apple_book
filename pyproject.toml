@@ -19,7 +19,7 @@ ripper = "cd_to_apple_book.ripper:main"
 importer = "cd_to_apple_book.importer:main"
 
 [project.optional-dependencies]
-test = ["pytest"]
+test = ["pytest", "ruff"]
 
 [build-system]
 requires = ["setuptools"]
