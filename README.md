@@ -116,3 +116,7 @@ importer contract.yaml
 
 Creates `Book_Title.m4b` in the book directory and automatically imports it to Books.
 
+If necesary, open directory with Finder and then Open File with .. Books.
+
+Then connect iPhone to Mac. Open in Finder and select Audiobooks tab.
+Select and sync the book.

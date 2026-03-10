@@ -132,6 +132,9 @@ def import_book(book_dir: Path):
         raise RuntimeError("Import failed: m4b not created correctly")
 
     print(f"Imported audiobook into Books: {m4b}")
+    print("""Open directory with Finder and then Open File with .. Books.
+    Then connect iPhone to Mac. Open in Finder and select Audiobooks tab.
+    Select and sync the book""")
 
 def main():
     OS = platform.system()
