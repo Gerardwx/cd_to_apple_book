@@ -71,14 +71,21 @@ def rip_cd(book_dir: Path, disc: int, *, paranoid: bool, dry_run: bool, audio: d
         print(f"⚠️  MusicBrainz lookup failed (exit {e.returncode})")
         print("Retrying without MusicBrainz metadata...")
 
-        # Retry with -n flag to skip MusicBrainz
-        cmd_no_mb = cmd + ["-n"]
-        try:
-            subprocess.run(cmd_no_mb, cwd=disc_dir, env=env, check=True)
-            print("✓ Ripped successfully without MusicBrainz metadata")
-        except subprocess.CalledProcessError as e2:
-            print(f"✗ Rip failed even without MusicBrainz: {e2}")
-            raise
+        worked = False
+        while not worked:
+            # Retry with -n flag to skip MusicBrainz
+            cmd_no_mb = cmd + ["-n"]
+            try:
+                subprocess.run(cmd_no_mb, cwd=disc_dir, env=env, check=True)
+                print("✓ Ripped successfully without MusicBrainz metadata")
+                worked = True
+            except KeyboardInterrupt:
+                print("Ctrl-C")
+                sys.exit(1)
+            except subprocess.CalledProcessError as e2:
+                sleep = 5
+                print(f"✗ Rip failed even without MusicBrainz: {e2}, sleeping {sleep}")
+                time.sleep(sleep)
 
     elapsed = time.monotonic() - start
     m, s = divmod(int(elapsed), 60)
