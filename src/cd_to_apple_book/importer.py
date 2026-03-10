@@ -1,6 +1,12 @@
 from pathlib import Path
 import platform
-import argparse, subprocess, yaml, sys, re, tempfile, shutil
+import argparse
+import subprocess
+import yaml
+import sys
+import re
+import tempfile
+import shutil
 
 def require(cmd: str):
     if not shutil.which(cmd):
@@ -129,7 +135,8 @@ def import_book(book_dir: Path):
 
 def main():
     OS = platform.system()
-    if OS != "Darwin": sys.exit("importer must run on Mac OS X")
+    if OS != "Darwin": 
+        sys.exit("importer must run on Mac OS X")
     require("ffmpeg")
     require("ffprobe")
 

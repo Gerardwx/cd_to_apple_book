@@ -1,9 +1,16 @@
 from pathlib import Path
-import argparse, platform, sys, subprocess, time, yaml, os
+import argparse
+import platform
+import sys
+import subprocess
+import time
+import yaml
+import os
 from .util import confirm
 
 def load_cfg(p: Path) -> dict:
-    with p.open() as f: return yaml.safe_load(f)
+    with p.open() as f: 
+        return yaml.safe_load(f)
 
 def write_yaml(book_dir: Path, meta: dict):
     with (book_dir / "book.yaml").open("w") as f:
