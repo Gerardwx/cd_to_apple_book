@@ -87,6 +87,7 @@ def rip_cd(book_dir: Path, disc: int, *, paranoid: bool, dry_run: bool, audio: d
                 print(f"✗ Rip failed even without MusicBrainz: {e2}, sleeping {sleep}")
                 time.sleep(sleep)
 
+    subprocess.run('/usr/bin/eject')
     elapsed = time.monotonic() - start
     m, s = divmod(int(elapsed), 60)
     print(f"Disc {disc} ripped in {m}m {s}s")
@@ -97,7 +98,7 @@ def main():
     
     p = argparse.ArgumentParser(description="Rip audiobook CDs")
     p.add_argument("config", type=Path, help="YAML config file")
-    p.add_argument("--start-disc", type=int, default=1)
+    p.add_argument("--start-disc", type=int, default=1,help="disc to start or resume with")
     p.add_argument("--dry-run", action="store_true")
     mode = p.add_mutually_exclusive_group()
     mode.add_argument("--paranoid", action="store_true", help="Full paranoia (slow)")
