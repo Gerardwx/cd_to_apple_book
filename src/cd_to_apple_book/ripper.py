@@ -1,5 +1,6 @@
 from pathlib import Path
 import argparse
+import fcntl
 import platform
 import sys
 import subprocess
@@ -7,6 +8,10 @@ import time
 import yaml
 import os
 from .util import confirm
+
+# Linux ioctl constants for CD drive status
+CDROM_DRIVE_STATUS = 0x5326
+CDS_DISC_OK = 4
 
 def load_cfg(p: Path) -> dict:
     with p.open() as f: 
@@ -29,17 +34,35 @@ def make_ffmpeg_opts(audio: dict) -> str:
 
     return " ".join(opts)
 
-def rip_cd(book_dir: Path, disc: int, *, paranoid: bool, dry_run: bool, audio: dict | None = None):
+def wait_for_disc(disc: int, device: str = "/dev/cdrom", poll_interval: int = 5):
+    """Poll the CD drive until a disc is detected."""
+    print(f"Insert disc {disc} into {device} — waiting…", flush=True)
+    while True:
+        try:
+            with open(device, "rb") as fd:
+                status = fcntl.ioctl(fd, CDROM_DRIVE_STATUS)
+            if status == CDS_DISC_OK:
+                print(f"Disc {disc} detected.", flush=True)
+                return
+        except OSError:
+            pass
+        time.sleep(poll_interval)
+
+
+def rip_cd(book_dir: Path, disc: int, *, paranoid: bool, dry_run: bool, audio: dict | None = None, poll: bool = False, device: str = "/dev/cdrom"):
     disc_dir = book_dir / f"disc{disc}"
     if disc_dir.exists() and any(disc_dir.glob("*.m4a")):
         print(f"Disc {disc} already ripped — skipping")
         return
 
     disc_dir.mkdir(parents=True, exist_ok=True)
-    confirm(f"Insert CD {disc}")
+    if poll:
+        wait_for_disc(disc, device)
+    else:
+        confirm(f"Insert CD {disc}")
 
     # abcde defaults + explicit behavior
-    cmd = ["abcde", "-o", "m4a"]
+    cmd = ["abcde", "-o", "m4a", "-d", device]
     if disc != 1:
         cmd.append("-N")  # non-interactive after disc 1
 
@@ -98,8 +121,10 @@ def main():
     
     p = argparse.ArgumentParser(description="Rip audiobook CDs")
     p.add_argument("config", type=Path, help="YAML config file")
-    p.add_argument("--start-disc", type=int, default=1,help="disc to start or resume with")
+    p.add_argument("--start-disc", type=int, default=1, help="disc to start or resume with")
     p.add_argument("--dry-run", action="store_true")
+    p.add_argument("--poll", action="store_true", help="Poll the drive for disc insertion instead of waiting for ENTER")
+    p.add_argument("--device", default="/dev/cdrom", help="CD drive device (default: /dev/cdrom)")
     mode = p.add_mutually_exclusive_group()
     mode.add_argument("--paranoid", action="store_true", help="Full paranoia (slow)")
     mode.add_argument("--relaxed", action="store_true", help="Relaxed mode (default)")
@@ -121,7 +146,7 @@ def main():
     audio = cfg.get("audio")
 
     for disc in range(args.start_disc, cfg["cds"] + 1):
-        rip_cd(book_dir, disc, paranoid=paranoid, dry_run=args.dry_run, audio=audio)
+        rip_cd(book_dir, disc, paranoid=paranoid, dry_run=args.dry_run, audio=audio, poll=args.poll, device=args.device)
 
 if __name__ == "__main__":
     main()
