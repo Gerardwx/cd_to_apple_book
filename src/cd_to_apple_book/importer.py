@@ -115,8 +115,9 @@ def import_book(book_dir: Path):
             "-c:a", "copy",
             "-metadata", f"title={meta['title']}",
             "-metadata", f"album={meta['title']}",
+            "-metadata", f"artist={meta.get('author','')}",
             "-metadata", f"album_artist={meta.get('author','')}",
-            "-metadata", f"artist={meta.get('narrator','')}",
+            "-metadata", f"composer={meta.get('narrator','')}",
             "-metadata", "genre=Audiobook",
             m4b,
         ]
