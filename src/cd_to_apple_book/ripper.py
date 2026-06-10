@@ -123,7 +123,7 @@ def main():
     p.add_argument("config", type=Path, help="YAML config file")
     p.add_argument("--start-disc", type=int, default=1, help="disc to start or resume with")
     p.add_argument("--dry-run", action="store_true")
-    p.add_argument("--poll", action="store_true", help="Poll the drive for disc insertion instead of waiting for ENTER")
+    p.add_argument("--no-poll", action="store_true", help="Wait for ENTER instead of polling the drive for disc insertion")
     p.add_argument("--device", default="/dev/cdrom", help="CD drive device (default: /dev/cdrom)")
     mode = p.add_mutually_exclusive_group()
     mode.add_argument("--paranoid", action="store_true", help="Full paranoia (slow)")
@@ -146,7 +146,7 @@ def main():
     audio = cfg.get("audio")
 
     for disc in range(args.start_disc, cfg["cds"] + 1):
-        rip_cd(book_dir, disc, paranoid=paranoid, dry_run=args.dry_run, audio=audio, poll=args.poll, device=args.device)
+        rip_cd(book_dir, disc, paranoid=paranoid, dry_run=args.dry_run, audio=audio, poll=not args.no_poll, device=args.device)
 
 if __name__ == "__main__":
     main()
