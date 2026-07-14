@@ -63,12 +63,14 @@ Rips audiobook CDs using `abcde` and creates organized directories with m4a file
 ```bash
 ripper contract.yaml
 ```
+By default the program will poll the CD drive for a new drive after prompting user to insert the next one.
 
 **Options:**
 - `--start-disc N`: Resume from disc N (useful if interrupted)
 - `--paranoid`: Use full error correction (slow but safest)
 - `--relaxed`: Faster ripping with fewer retries (default)
 - `--dry-run`: Show what would be done without actually ripping
+- `--no-poll`: Wait for ENTER instead of polling the drive for disc insertion
 
 **Output:**
 
